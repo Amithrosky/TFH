@@ -1,33 +1,74 @@
-# TFH (Temporary File Holder) v2.1
+<div align="center">
 
-A lightweight, secure, and ephemeral file-sharing utility designed for browser-based transient data management.
+████████╗███████╗██╗  ██╗╚══██╔══╝██╔════╝██║  ██║██║   █████╗  ███████║██║   ██╔══╝  ██╔══██║██║   ██║     ██║  ██║╚═╝   ╚═╝     ╚═╝  ╚═╝
+### **Temporary File Holder**
+**A secure, ephemeral, zero-knowledge utility for temporary browser-based file sharing.**
 
-## 🚀 Features
+[![License: MIT](https://img.shields.io/badge/License-MIT-007ACC.svg?style=for-the-badge)](#license)
+[![Security: E2E Encrypted](https://img.shields.io/badge/Security-Client--Side_Encryption-green?style=for-the-badge)](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API)
+[![Storage: IndexedDB](https://img.shields.io/badge/Storage-IndexedDB-orange?style=for-the-badge)](https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API)
+[![Protocol: P2P Transfer](https://img.shields.io/badge/Transfer-P2P_WebRTC-purple?style=for-the-badge)](https://webrtc.org/)
 
-- **30-Minute Self-Destruct**: Automatically purges uploaded files after 30 minutes of retention.
-- **P2P Direct Share**: Leverages WebRTC for direct peer-to-peer file transfers, ensuring files never touch a central server.
-- **Browser Storage Integration**: Employs IndexedDB (`C:/TFH/Temp_files/` virtual path) for local temporary holding.
-- **Real-Time Terminal Log**: Built-in system console for live monitoring of network events and storage states.
-- **Client-Side Encryption**: Ensures transient files remain protected during the holding period.
+*Share files securely with an automated 30-minute self-destruction protocol, P2P transfer, and local IndexedDB caching.*
 
-## ⚡ Quick Start
-
-1. **Access**: Visit TFH (https://amithrosky.github.io/TFH/)
-2. **Hold or Share**:
-   - **Virtual Hold**: Drag and drop files to hold them in browser memory for up to 30 minutes.
-   - **P2P Share**: Generate a direct WebRTC connection link to transfer files directly to another device.
-3. **Purge**: Clear all active holding files instantly using the manual system wipe option.
-
-## 🔒 Security & Retention Protocol
-
-| Component | Implementation Details |
-| :--- | :--- |
-| **Retention Limit** | 30 Minutes (Automated purge protocol) |
-| **Storage Engine** | Browser IndexedDB (Client-side virtual node) |
-| **P2P Engine** | WebRTC DataChannels (No server-side storage) |
-
-> **Note**: For WebRTC P2P transfers, ensure the host browser tab remains open until the receiving peer completes the file extraction.
+[Features](#-key-features) • [Architecture](#-system-architecture) • [Security Model](#-security--privacy-model) • [Quick Start](#-quick-start)
 
 ---
 
-Developed by [Amith Rosky](https://github.com/amithrosky).
+</div>
+
+## 📑 Table of Contents
+- [Overview](#-overview)
+- [Key Features](#-key-features)
+- [System Architecture](#-system-architecture)
+- [Technical Breakdown](#-technical-breakdown)
+- [Security & Privacy Model](#-security--privacy-model)
+- [Quick Start](#-quick-start)
+- [License](#-license)
+
+---
+
+## 🌐 Overview
+
+**TFH (Temporary File Holder)** is a client-side, privacy-first web utility built for short-term file storage and ephemeral peer-to-peer sharing. Built around a zero-knowledge security philosophy, TFH processes encryption entirely in the browser, buffers payloads in local `IndexedDB` storage, and enforces a strict **30-minute self-destruct protocol** on all hosted assets.
+
+---
+
+## ✨ Key Features
+
+* ⏱️ **30-Minute Self-Destruct Protocol**: Automated lifecycle timer permanently purges stored file blobs, metadata, and memory references after 30 minutes.
+* 🔐 **Client-Side Encryption**: Zero-knowledge encryption and decryption pipeline executes locally prior to storage or network transmission.
+* ⚡ **Direct P2P File Transfer**: High-speed browser-to-browser streaming via WebRTC DataChannels eliminates reliance on central cloud servers.
+* 💾 **IndexedDB Local Buffering**: High-performance local database staging allows fluid handling of large file payloads directly within the browser client.
+* 📟 **Real-Time Event System Log**: Integrated telemetry console tracking active handshakes, crypto operations, lifecycle states, and system events in real time.
+
+---
+
+## 🏗️ System Architecture
+
+```mermaid
+graph TD
+    subgraph Client ["TFH Client Environment"]
+        UI["User Interface"]
+        Logger["Real-Time Event Logger"]
+        Engine["Client-Side Crypto Engine"]
+        Storage["IndexedDB Local Buffer"]
+        Timer["30-Min Lifecycle Protocol"]
+    end
+
+    UI ==> Engine
+    Engine --> Storage
+    Storage --> Timer
+    Engine --> Logger
+
+    subgraph Network ["P2P Transfer Layer"]
+        P2P["WebRTC P2P DataChannel"]
+        DirectStream["Encrypted Direct Stream"]
+    end
+
+    Storage --> P2P
+    P2P --> DirectStream
+
+    Timer -- "Timer Expires (30m)" --> AutoPurge["Irreversible File & Key Wipe"]
+    AutoPurge --> Storage
+🔬 Technical BreakdownComponentTechnology / ProtocolPurposeCryptographyWeb Crypto API (AES-GCM / WebCrypto)End-to-end client-side encryptionStorage EngineBrowser IndexedDBHigh-capacity temporary file stagingNetwork ProtocolWebRTC DataChannelsDirect P2P peer transfersLifecycle ManagerBackground Timer AgentEnforces exact 30-minute data purgeTelemetryReal-Time Event System LogLive visibility into operations and transfers🛡️ Security & Privacy ModelIrreversible Data Purge: Files and crypto references are automatically shredded upon expiration of the 30-minute timer.Zero Plaintext Persistence: File data is encrypted on the client side before being committed to IndexedDB or streamed over P2P.Decentralized Pipeline: Direct peer-to-peer data channels keep file transfers strictly between the sender and receiver.🚀 Quick StartClone or download the repository:Bashgit clone [https://github.com/your-username/tfh.git](https://github.com/your-username/tfh.git)
