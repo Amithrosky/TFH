@@ -1,0 +1,1111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TFH | Secure Temporary File Holder v2.1</title>
+    
+    <!-- Fonts: Inter for UI, Roboto Mono for Terminal -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- PeerJS for WebRTC P2P Sharing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.2/peerjs.min.js"></script>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['Roboto Mono', 'monospace'],
+                    },
+                    colors: {
+                        vault: {
+                            900: '#0a0a0f',
+                            800: '#13131f',
+                            700: '#1c1c2e',
+                            glow: '#00f0ff',
+                            accent: '#7000ff',
+                            danger: '#ff003c'
+                        }
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'slide-up': 'slideUp 0.3s ease-out forwards',
+                        'scanline': 'scanline 8s linear infinite',
+                    },
+                    keyframes: {
+                        slideUp: {
+                            '0%': { opacity: '0', transform: 'translateY(10px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' },
+                        },
+                        scanline: {
+                            '0%': { transform: 'translateY(-100%)' },
+                            '100%': { transform: 'translateY(100vh)' }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background-color: #050505;
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(112, 0, 255, 0.15) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(0, 240, 255, 0.1) 0px, transparent 50%);
+            background-attachment: fixed;
+            color: #e2e8f0;
+            overflow-x: hidden;
+        }
+
+        /* Ambient Grid Background */
+        .grid-bg {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image: 
+                linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+            background-size: 30px 30px;
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        /* Scanline Overlay for Terminal Feel */
+        .scanline-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.1) 50%, rgba(0,0,0,0.1));
+            background-size: 100% 4px;
+            z-index: 9999;
+            pointer-events: none;
+            opacity: 0.3;
+        }
+
+        /* Glassmorphism Utilities */
+        .glass-panel {
+            background: rgba(19, 19, 31, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #0a0a0f; }
+        ::-webkit-scrollbar-thumb { background: #334; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #556; }
+
+        /* Drag & Drop Active State */
+        .drag-active {
+            border-color: #00f0ff !important;
+            background: rgba(0, 240, 255, 0.05) !important;
+            box-shadow: 0 0 20px rgba(0, 240, 255, 0.2) inset;
+        }
+
+        /* Fetching Progress State */
+        .fetching-glow {
+            box-shadow: 0 0 15px rgba(0, 240, 255, 0.4);
+            border-color: #00f0ff !important;
+        }
+
+        /* Toast Container */
+        #toast-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 50;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col font-sans antialiased selection:bg-vault-glow selection:text-black">
+
+    <div class="grid-bg"></div>
+    <div class="scanline-overlay"></div>
+
+    <header class="glass-panel sticky top-0 z-40 border-b border-white/10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-vault-accent to-vault-glow p-[1px]">
+                        <div class="w-full h-full bg-vault-900 rounded-lg flex items-center justify-center">
+                            <i class="fa-solid fa-server text-transparent bg-clip-text bg-gradient-to-r from-vault-accent to-vault-glow text-lg"></i>
+                        </div>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold tracking-wider text-white">TFH <span class="text-xs font-normal text-vault-glow ml-1">v2.1</span></h1>
+                        <p class="text-[10px] text-gray-400 uppercase tracking-widest leading-none">Temporary File Holder</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-4 text-sm text-gray-400 font-mono">
+                    <div class="flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                        Memory Node: Active
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full flex flex-col lg:flex-row gap-8">
+        
+        <!-- Left Column: Upload Zone -->
+        <section class="w-full lg:w-1/3 flex flex-col gap-4">
+            <div class="glass-panel rounded-2xl p-6 relative overflow-hidden group h-full min-h-[300px] flex flex-col items-center justify-center">
+                <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 bg-vault-accent opacity-20 blur-[50px] rounded-full group-hover:bg-vault-glow transition-colors duration-500"></div>
+                
+                <div id="drop-zone" class="relative z-10 w-full h-full border-2 border-dashed border-gray-600 rounded-xl flex flex-col items-center justify-center p-8 transition-all duration-300 cursor-pointer hover:border-vault-glow hover:bg-white/5">
+                    <input type="file" id="file-input" class="hidden" multiple>
+                    
+                    <div class="w-16 h-16 rounded-full bg-vault-800 border border-gray-700 flex items-center justify-center mb-4 text-2xl text-gray-400 group-hover:text-vault-glow transition-colors shadow-lg">
+                        <i class="fa-solid fa-cloud-arrow-up"></i>
+                    </div>
+                    
+                    <h3 class="text-lg font-semibold text-white mb-2 text-center">Encrypt & Upload</h3>
+                    <p class="text-sm text-gray-400 text-center mb-6">Drag & drop files here, or click to browse.</p>
+                    
+                    <button class="px-6 py-2 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 text-white text-sm font-medium transition-all shadow-sm pointer-events-none">
+                        Select Files
+                    </button>
+                </div>
+
+                <div class="mt-4 w-full flex flex-col gap-2 z-10 relative">
+                    <div class="flex items-center gap-2 text-xs text-gray-400 w-full mb-2 opacity-60">
+                        <div class="h-px bg-gray-600 flex-grow"></div>
+                        <span class="uppercase tracking-widest font-mono text-[10px]">Or Remote Link</span>
+                        <div class="h-px bg-gray-600 flex-grow"></div>
+                    </div>
+                    
+                    <!-- Fetch Controls -->
+                    <div class="flex gap-2 w-full relative">
+                        <!-- Progress overlay for input -->
+                        <div id="fetch-progress-bar" class="absolute bottom-0 left-0 h-0.5 bg-vault-glow w-0 transition-all duration-300 rounded-bl-lg"></div>
+                        
+                        <input type="url" id="url-input" placeholder="https://domain.com/payload.bin" class="flex-grow bg-[#0a0a0f] border border-gray-600 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-vault-glow transition-all font-mono shadow-inner disabled:opacity-50">
+                        
+                        <button id="fetch-url-btn" class="px-4 py-2 bg-vault-800 hover:bg-vault-700 border border-gray-600 hover:border-vault-glow text-vault-glow rounded-lg text-xs font-semibold transition-all whitespace-nowrap shadow-sm group w-24 flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-link group-hover:animate-pulse"></i> Fetch
+                        </button>
+                        
+                        <button id="cancel-fetch-btn" class="hidden px-4 py-2 bg-vault-danger/20 hover:bg-vault-danger/40 border border-vault-danger text-white rounded-lg text-xs font-semibold transition-all whitespace-nowrap shadow-[0_0_10px_rgba(255,0,60,0.3)] w-24 flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-xmark"></i> Abort
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Protocol Info -->
+            <div class="glass-panel rounded-2xl p-5 border-l-4 border-l-vault-accent">
+                <h4 class="text-sm font-bold text-white mb-2 flex items-center gap-2">
+                    <i class="fa-solid fa-shield-halved text-vault-accent"></i> Retention Protocol
+                </h4>
+                <p class="text-xs text-gray-400 leading-relaxed">
+                    Files are held securely in a simulated <code class="text-vault-glow bg-black/50 px-1 rounded">C:/TFH/Temp_files/</code> virtual memory block. 
+                    <br><br>
+                    Files automatically self-destruct exactly <strong>30 minutes</strong> after upload unless extracted. Use the terminal console below to monitor network activity.
+                </p>
+            </div>
+        </section>
+
+        <!-- Right Column: File List & Terminal -->
+        <section class="w-full lg:w-2/3 flex flex-col h-full gap-4">
+            
+            <div class="glass-panel rounded-2xl flex flex-col flex-grow min-h-[400px] overflow-hidden relative">
+                
+                <!-- Header -->
+                <div class="p-4 border-b border-white/10 flex justify-between items-center bg-white/5 relative z-10">
+                    <h2 class="text-lg font-semibold text-white flex items-center gap-2">
+                        <i class="fa-regular fa-folder-open text-vault-glow"></i> Active Holding Zone
+                        <span id="file-count" class="ml-2 px-2.5 py-0.5 bg-vault-900 border border-white/10 rounded-full text-xs font-mono text-gray-300">
+                            0
+                        </span>
+                    </h2>
+                    
+                    <button id="purge-all-btn" class="px-3 py-1.5 bg-red-900/30 hover:bg-red-900/60 border border-red-500/50 text-red-400 rounded text-xs font-mono transition-colors flex items-center gap-2 opacity-0 pointer-events-none">
+                        <i class="fa-solid fa-skull"></i> Purge All
+                    </button>
+                </div>
+
+                <!-- File List Area -->
+                <div id="file-list" class="flex-grow p-4 overflow-y-auto flex flex-col gap-3 relative z-10">
+                    <!-- Empty State -->
+                    <div id="empty-state" class="absolute inset-0 flex flex-col items-center justify-center text-gray-500">
+                        <i class="fa-solid fa-ghost text-4xl mb-3 opacity-50"></i>
+                        <p class="text-sm">Holding zone is empty.</p>
+                        <p class="text-xs mt-1 font-mono opacity-50">Awaiting input stream...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Simulated Terminal -->
+            <div class="glass-panel rounded-2xl overflow-hidden h-40 flex flex-col">
+                <div class="bg-black/40 border-b border-white/10 px-3 py-1.5 flex justify-between items-center">
+                    <span class="text-[10px] font-mono text-gray-500 uppercase tracking-widest">System Event Log</span>
+                    <div class="flex gap-1.5">
+                        <div class="w-2.5 h-2.5 rounded-full bg-red-500/50"></div>
+                        <div class="w-2.5 h-2.5 rounded-full bg-yellow-500/50"></div>
+                        <div class="w-2.5 h-2.5 rounded-full bg-green-500/50"></div>
+                    </div>
+                </div>
+                <div class="bg-[#0a0a0f] p-3 flex-grow overflow-y-auto font-mono text-[11px] leading-relaxed" id="terminal-log">
+                    <div class="text-gray-500">[SYSTEM] Initializing TFH Kernel v2.1...</div>
+                    <div class="text-green-400">[OK] Browser Secure Storage (IndexedDB) Mounted.</div>
+                    <div class="text-gray-500">[SYSTEM] Ready to receive temporary data blocks.</div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Custom Purge Confirmation Modal -->
+    <div id="confirm-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm transition-opacity duration-300 opacity-0">
+        <div class="glass-panel p-6 rounded-xl max-w-sm w-full border border-vault-danger/50 shadow-[0_0_30px_rgba(255,0,60,0.2)] transform scale-95 transition-transform duration-300">
+            <h3 class="text-lg font-bold text-white mb-2"><i class="fa-solid fa-triangle-exclamation text-vault-danger mr-2"></i> Confirm Purge</h3>
+            <p class="text-sm text-gray-300 mb-6">Are you sure you want to securely wipe all temporary files? This action cannot be undone.</p>
+            <div class="flex justify-end gap-3">
+                <button id="cancel-purge-btn" class="px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-lg text-sm font-medium transition-colors">Cancel</button>
+                <button id="confirm-purge-btn" class="px-4 py-2 bg-vault-danger/20 hover:bg-vault-danger/40 border border-vault-danger text-white rounded-lg text-sm font-bold transition-colors shadow-[0_0_15px_rgba(255,0,60,0.4)]">Execute Wipe</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- P2P Sender Modal -->
+    <div id="p2p-sender-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm transition-opacity duration-300 opacity-0">
+        <div class="glass-panel p-6 rounded-xl max-w-md w-full border border-vault-glow/50 shadow-[0_0_30px_rgba(0,240,255,0.2)] transform scale-95 transition-transform duration-300 relative overflow-hidden">
+            <!-- Scanline effect for modal -->
+            <div class="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:100%_4px] pointer-events-none opacity-20"></div>
+            
+            <h3 class="text-lg font-bold text-white mb-2 flex items-center gap-2">
+                <i class="fa-solid fa-satellite-dish text-vault-glow animate-pulse"></i> P2P Secure Share
+            </h3>
+            <p class="text-xs text-gray-400 mb-4">Direct WebRTC connection. File stays on your device. <strong class="text-vault-danger">Do not close this tab while sharing.</strong></p>
+            
+            <!-- Protocol Warning Guard -->
+            <div id="p2p-file-warning" class="hidden bg-vault-danger/10 border border-vault-danger/30 text-red-400 text-[11px] p-2.5 rounded-lg mb-4 leading-relaxed">
+                <i class="fa-solid fa-triangle-exclamation mr-1"></i> <strong>Local Environment Detected:</strong> You are viewing this file locally. To generate a working share link for others, please access this via your hosted web domain (e.g., GitHub Pages).
+            </div>
+
+            <div class="bg-black/50 border border-gray-600 rounded-lg p-3 flex items-center gap-2 mb-4">
+                <input type="text" id="p2p-share-link" readonly class="bg-transparent border-none outline-none text-xs text-gray-300 flex-grow font-mono selection:bg-vault-glow selection:text-black" value="Generating secure link...">
+                <button id="copy-p2p-link-btn" class="text-gray-400 hover:text-vault-glow transition-colors px-2">
+                    <i class="fa-regular fa-copy"></i>
+                </button>
+            </div>
+
+            <div class="flex items-center gap-3 text-sm">
+                <div id="p2p-status-indicator" class="w-3 h-3 rounded-full bg-yellow-500 animate-pulse"></div>
+                <span id="p2p-status-text" class="text-gray-300 font-mono text-xs">Initializing Peer Node...</span>
+            </div>
+
+            <div class="mt-6 flex justify-end">
+                <button onclick="cancelP2PShare()" class="px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-lg text-sm font-medium transition-colors relative z-10">Close Connection</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- P2P Receiver Overlay -->
+    <div id="p2p-receiver-modal" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-black/90 backdrop-blur-md transition-opacity duration-300 opacity-0">
+        <div class="glass-panel p-8 rounded-xl max-w-sm w-full border border-vault-accent text-center shadow-[0_0_40px_rgba(112,0,255,0.3)]">
+            <div class="w-16 h-16 rounded-full bg-vault-accent/20 flex items-center justify-center mx-auto mb-4 relative">
+                <div class="absolute inset-0 rounded-full border-2 border-vault-accent border-t-transparent animate-spin"></div>
+                <i class="fa-solid fa-download text-vault-accent text-xl"></i>
+            </div>
+            <h3 class="text-xl font-bold text-white mb-2">Incoming P2P Transfer</h3>
+            <p id="p2p-recv-filename" class="text-sm font-mono text-vault-glow mb-4 truncate">filename.ext</p>
+            
+            <p id="p2p-recv-status" class="text-xs text-gray-400 mb-6">Connecting to peer node...</p>
+
+            <div class="w-full bg-gray-800 rounded-full h-1.5 mb-6 overflow-hidden hidden" id="p2p-recv-progress-container">
+                <div id="p2p-recv-progress-bar" class="bg-gradient-to-r from-vault-accent to-vault-glow h-1.5 rounded-full w-full animate-pulse-slow"></div>
+            </div>
+
+            <button onclick="window.location.href=window.location.pathname" id="p2p-recv-cancel" class="px-6 py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-lg text-sm font-medium transition-colors">Cancel Request</button>
+        </div>
+    </div>
+
+    <!-- Toast Notifications Container -->
+    <div id="toast-container"></div>
+
+    <script>
+        // --- CONFIGURATION & STATE ---
+        const DB_NAME = 'TFH_VaultDB';
+        const STORE_NAME = 'temp_files';
+        const DB_VERSION = 1;
+        const RETENTION_TIME_MS = 30 * 60 * 1000; // 30 minutes
+        let db;
+        let fileTimers = {}; 
+        let activeFetchController = null; // Used to abort fetch requests
+
+        // --- DOM ELEMENTS ---
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const fileList = document.getElementById('file-list');
+        const emptyState = document.getElementById('empty-state');
+        const fileCountBadge = document.getElementById('file-count');
+        const terminalLog = document.getElementById('terminal-log');
+        const toastContainer = document.getElementById('toast-container');
+        const purgeAllBtn = document.getElementById('purge-all-btn');
+
+        const urlInput = document.getElementById('url-input');
+        const fetchUrlBtn = document.getElementById('fetch-url-btn');
+        const cancelFetchBtn = document.getElementById('cancel-fetch-btn');
+        const fetchProgressBar = document.getElementById('fetch-progress-bar');
+        
+        // Modal elements
+        const confirmModal = document.getElementById('confirm-modal');
+        const cancelPurgeBtn = document.getElementById('cancel-purge-btn');
+        const confirmPurgeBtn = document.getElementById('confirm-purge-btn');
+        let pendingPurgeResolve = null;
+
+        // --- UTILITY FUNCTIONS ---
+        function formatBytes(bytes, decimals = 2) {
+            if (!+bytes) return '0 Bytes';
+            const k = 1024;
+            const dm = decimals < 0 ? 0 : decimals;
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+        }
+
+        function logToTerminal(message, type = 'info') {
+            const div = document.createElement('div');
+            const timestamp = new Date().toLocaleTimeString([], { hour12: false });
+            
+            let colorClass = 'text-gray-400';
+            if (type === 'success') colorClass = 'text-green-400';
+            if (type === 'warning') colorClass = 'text-yellow-400';
+            if (type === 'error') colorClass = 'text-vault-danger';
+            if (type === 'action') colorClass = 'text-vault-glow';
+            if (type === 'abort') colorClass = 'text-[#ff003c] font-bold';
+
+            div.className = colorClass;
+            div.innerHTML = `<span class="text-gray-600">[${timestamp}]</span> ${message}`;
+            
+            terminalLog.appendChild(div);
+            terminalLog.scrollTop = terminalLog.scrollHeight;
+        }
+
+        function showToast(message, type = 'success') {
+            const toast = document.createElement('div');
+            toast.className = `glass-panel px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 animate-slide-up border-l-4 ${type === 'success' ? 'border-l-green-500' : type === 'error' ? 'border-l-vault-danger' : 'border-l-vault-glow'}`;
+            
+            const icon = type === 'success' ? '<i class="fa-solid fa-check text-green-500"></i>' : 
+                         type === 'error' ? '<i class="fa-solid fa-triangle-exclamation text-vault-danger"></i>' : 
+                         '<i class="fa-solid fa-bell text-vault-glow"></i>';
+
+            toast.innerHTML = `
+                ${icon}
+                <span class="text-sm text-white font-medium">${message}</span>
+            `;
+            
+            toastContainer.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(10px)';
+                toast.style.transition = 'all 0.3s ease';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        function generateId() {
+            return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+        }
+
+        // --- DATABASE OPERATIONS (IndexedDB) ---
+        function initDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+                request.onerror = () => {
+                    logToTerminal('[ERROR] IndexedDB initialization failed.', 'error');
+                    reject('Database error');
+                };
+                request.onsuccess = (event) => {
+                    db = event.target.result;
+                    resolve(db);
+                };
+                request.onupgradeneeded = (event) => {
+                    db = event.target.result;
+                    if (!db.objectStoreNames.contains(STORE_NAME)) {
+                        const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+                        store.createIndex('timestamp', 'timestamp', { unique: false });
+                        logToTerminal('[SYSTEM] Virtual memory schema created.', 'info');
+                    }
+                };
+            });
+        }
+
+        async function saveFileToDB(file) {
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([STORE_NAME], 'readwrite');
+                const store = transaction.objectStore(STORE_NAME);
+                const fileRecord = {
+                    id: generateId(),
+                    name: file.name,
+                    size: file.size,
+                    type: file.type || 'application/octet-stream',
+                    timestamp: Date.now(),
+                    expiresAt: Date.now() + RETENTION_TIME_MS,
+                    blob: file 
+                };
+                const request = store.add(fileRecord);
+                request.onsuccess = () => resolve(fileRecord);
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        async function getAllFilesFromDB() {
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([STORE_NAME], 'readonly');
+                const store = transaction.objectStore(STORE_NAME);
+                const request = store.getAll();
+                request.onsuccess = () => {
+                    const files = request.result.sort((a, b) => b.timestamp - a.timestamp);
+                    resolve(files);
+                };
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        async function getFileFromDB(id) {
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([STORE_NAME], 'readonly');
+                const store = transaction.objectStore(STORE_NAME);
+                const request = store.get(id);
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        async function deleteFileFromDB(id) {
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([STORE_NAME], 'readwrite');
+                const store = transaction.objectStore(STORE_NAME);
+                const request = store.delete(id);
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        // --- CORE LOGIC & TIMERS ---
+        async function handleFiles(files) {
+            if (files.length === 0) return;
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                logToTerminal(`[SYSTEM] Encrypting and routing: ${file.name} to C:/TFH/Temp_files/`, 'info');
+                try {
+                    await saveFileToDB(file);
+                    logToTerminal(`[SUCCESS] File securely cached in Temp Memory.`, 'success');
+                    showToast(`${file.name} secured.`, 'success');
+                } catch (err) {
+                    logToTerminal(`[ERROR] Failed to route ${file.name}`, 'error');
+                    showToast(`Failed to upload ${file.name}`, 'error');
+                }
+            }
+            await refreshUI();
+        }
+
+        function getRemainingTimeText(expiresAt) {
+            const now = Date.now();
+            const remainingMs = expiresAt - now;
+            if (remainingMs <= 0) return '00:00';
+            const minutes = Math.floor(remainingMs / 60000);
+            const seconds = Math.floor((remainingMs % 60000) / 1000);
+            return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+
+        function calculateProgress(timestamp, expiresAt) {
+            const now = Date.now();
+            const totalDuration = expiresAt - timestamp;
+            const elapsed = now - timestamp;
+            let percentage = (elapsed / totalDuration) * 100;
+            return Math.min(Math.max(percentage, 0), 100); 
+        }
+
+        async function refreshUI() {
+            const files = await getAllFilesFromDB();
+            
+            fileCountBadge.textContent = files.length;
+            
+            if (files.length === 0) {
+                emptyState.style.display = 'flex';
+                purgeAllBtn.classList.add('opacity-0', 'pointer-events-none');
+                Array.from(fileList.children).forEach(child => {
+                    if (child.id !== 'empty-state') child.remove();
+                });
+                return;
+            }
+
+            emptyState.style.display = 'none';
+            purgeAllBtn.classList.remove('opacity-0', 'pointer-events-none');
+            
+            Array.from(fileList.children).forEach(child => {
+                if (child.id !== 'empty-state') child.remove();
+            });
+
+            Object.values(fileTimers).forEach(clearInterval);
+            fileTimers = {};
+
+            const now = Date.now();
+            files.forEach(fileRecord => {
+                if (now >= fileRecord.expiresAt) {
+                    purgeFile(fileRecord.id, fileRecord.name, 'timeout');
+                    return;
+                }
+                createFileElement(fileRecord);
+            });
+        }
+
+        // --- DOM MANIPULATION & FILE RENDERING ---
+        function createFileElement(fileRecord) {
+            const el = document.createElement('div');
+            el.id = `file-${fileRecord.id}`;
+            el.className = 'bg-white/5 border border-white/10 rounded-xl p-3 hover:bg-white/10 transition-colors animate-slide-up flex flex-col gap-3 group relative overflow-hidden';
+            
+            const initialProgress = calculateProgress(fileRecord.timestamp, fileRecord.expiresAt);
+            
+            // Determine icon or Image Preview
+            let iconHtml = '';
+            if (fileRecord.type.startsWith('image/')) {
+                const objectUrl = URL.createObjectURL(fileRecord.blob);
+                iconHtml = `<div class="w-12 h-12 rounded bg-black/40 flex items-center justify-center shrink-0 bg-cover bg-center border border-white/10 shadow-inner" style="background-image: url('${objectUrl}')"></div>`;
+            } else {
+                let iconClass = 'fa-file';
+                let iconColor = 'text-gray-400';
+                if (fileRecord.type.includes('video')) { iconClass = 'fa-file-video'; iconColor = 'text-purple-400'; }
+                else if (fileRecord.type.includes('pdf')) { iconClass = 'fa-file-pdf'; iconColor = 'text-red-400'; }
+                else if (fileRecord.type.includes('zip') || fileRecord.type.includes('tar') || fileRecord.type.includes('compressed')) { iconClass = 'fa-file-zipper'; iconColor = 'text-yellow-400'; }
+                else if (fileRecord.name.endsWith('.bin')) { iconClass = 'fa-file-code'; iconColor = 'text-green-400'; }
+                
+                iconHtml = `<div class="w-12 h-12 rounded bg-black/40 flex items-center justify-center shrink-0 border border-white/5"><i class="fa-solid ${iconClass} ${iconColor} text-xl"></i></div>`;
+            }
+
+            el.innerHTML = `
+                <div id="progress-${fileRecord.id}" class="absolute top-0 left-0 h-1 bg-gradient-to-r from-vault-glow to-vault-accent transition-all duration-1000 ease-linear" style="width: ${initialProgress}%"></div>
+                
+                <div class="flex justify-between items-center z-10 relative w-full">
+                    <div class="flex items-center gap-3 overflow-hidden flex-grow">
+                        ${iconHtml}
+                        <div class="flex flex-col overflow-hidden min-w-0">
+                            <span class="text-sm font-semibold text-white truncate w-full pr-2" title="${fileRecord.name}">${fileRecord.name}</span>
+                            <div class="flex items-center gap-2 text-xs text-gray-400 font-mono mt-0.5">
+                                <span>${formatBytes(fileRecord.size)}</span>
+                                <span class="opacity-50">|</span>
+                                <span class="flex items-center gap-1 text-vault-glow w-16" id="timer-${fileRecord.id}">
+                                    <i class="fa-regular fa-clock"></i> 
+                                    ${getRemainingTimeText(fileRecord.expiresAt)}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center gap-2 shrink-0 ml-2">
+                        <button onclick="downloadAndSave('${fileRecord.id}', '${fileRecord.name}')" class="w-9 h-9 sm:w-auto sm:px-4 sm:py-2 bg-vault-accent/90 hover:bg-[#8519ff] text-white text-sm font-semibold rounded-lg shadow-[0_0_15px_rgba(112,0,255,0.3)] transition-all flex items-center justify-center gap-2" title="Save to Vault">
+                            <i class="fa-solid fa-download"></i> <span class="hidden sm:inline">Extract</span>
+                        </button>
+                        <button onclick="initiateP2PShare('${fileRecord.id}', '${fileRecord.name}')" class="w-9 h-9 bg-black/30 hover:bg-vault-glow/20 border border-white/10 hover:border-vault-glow text-gray-400 hover:text-vault-glow rounded-lg transition-all flex items-center justify-center" title="P2P Link Share">
+                            <i class="fa-solid fa-share-nodes"></i>
+                        </button>
+                        <button onclick="purgeFile('${fileRecord.id}', '${fileRecord.name}', 'manual')" class="w-9 h-9 bg-black/30 hover:bg-vault-danger/20 border border-white/10 hover:border-vault-danger text-gray-400 hover:text-vault-danger rounded-lg transition-all flex items-center justify-center" title="Secure Wipe">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            fileList.appendChild(el);
+
+            fileTimers[fileRecord.id] = setInterval(() => {
+                const timerEl = document.getElementById(`timer-${fileRecord.id}`);
+                const progressEl = document.getElementById(`progress-${fileRecord.id}`);
+                
+                if (!timerEl || !progressEl) {
+                    clearInterval(fileTimers[fileRecord.id]);
+                    return;
+                }
+
+                const remaining = fileRecord.expiresAt - Date.now();
+                if (remaining <= 0) {
+                    clearInterval(fileTimers[fileRecord.id]);
+                    purgeFile(fileRecord.id, fileRecord.name, 'timeout');
+                } else {
+                    timerEl.innerHTML = `<i class="fa-regular fa-clock"></i> ${getRemainingTimeText(fileRecord.expiresAt)}`;
+                    const progress = calculateProgress(fileRecord.timestamp, fileRecord.expiresAt);
+                    progressEl.style.width = `${progress}%`;
+                    
+                    if (remaining < 300000) { // < 5 mins
+                        timerEl.classList.remove('text-vault-glow');
+                        timerEl.classList.add('text-vault-danger', 'animate-pulse');
+                        progressEl.classList.remove('from-vault-glow', 'to-vault-accent');
+                        progressEl.classList.add('bg-vault-danger');
+                    }
+                }
+            }, 1000);
+        }
+
+        // --- ACTIONS (Download & Purge) ---
+        async function downloadAndSave(id, fileName) {
+            try {
+                logToTerminal(`[ACTION] Initiating extraction protocol for ${fileName}...`, 'action');
+                const record = await getFileFromDB(id);
+                if (!record || !record.blob) throw new Error("Data missing or expired.");
+
+                const url = URL.createObjectURL(record.blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = fileName; 
+                document.body.appendChild(a);
+                a.click();
+                
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+                }, 100);
+
+                logToTerminal(`[SUCCESS] ${fileName} routed to C:/TFH/Saved_files/`, 'success');
+                showToast(`Saved to Local Vault`, 'success');
+                await purgeFile(id, fileName, 'download'); 
+            } catch (err) {
+                logToTerminal(`[ERROR] Extraction failed: ${err.message}`, 'error');
+                showToast('Failed to extract file.', 'error');
+            }
+        }
+
+        async function purgeFile(id, fileName, reason = 'timeout') {
+            if (fileTimers[id]) {
+                clearInterval(fileTimers[id]);
+                delete fileTimers[id];
+            }
+
+            try {
+                await deleteFileFromDB(id);
+                const el = document.getElementById(`file-${id}`);
+                if (el) {
+                    // Visual glitch/fade on remove
+                    el.style.transition = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+                    el.style.opacity = '0';
+                    el.style.transform = 'scale(0.95) translateX(20px)';
+                    if (reason === 'manual') el.style.filter = 'contrast(200%) hue-rotate(90deg)';
+                    
+                    setTimeout(() => {
+                        el.remove();
+                        const remainingFiles = document.querySelectorAll('[id^="file-"]').length;
+                        fileCountBadge.textContent = remainingFiles;
+                        if (remainingFiles === 0) {
+                            emptyState.style.display = 'flex';
+                            purgeAllBtn.classList.add('opacity-0', 'pointer-events-none');
+                        }
+                    }, 300);
+                }
+
+                if (reason === 'timeout') {
+                    logToTerminal(`[SYSTEM] Retention exceeded. Purged ${fileName}.`, 'warning');
+                    showToast(`${fileName} expired.`, 'error');
+                } else if (reason === 'manual') {
+                    logToTerminal(`[ACTION] Secure wipe executed on ${fileName}.`, 'action');
+                    showToast(`Wiped ${fileName}`, 'success');
+                } else if (reason === 'download') {
+                    logToTerminal(`[SYSTEM] Cleared ${fileName} post-extraction.`, 'info');
+                }
+            } catch (err) {
+                console.error("Purge error", err);
+            }
+        }
+
+        // Custom Modal Logic
+        function askForConfirmation() {
+            return new Promise((resolve) => {
+                confirmModal.classList.remove('hidden');
+                setTimeout(() => {
+                    confirmModal.classList.remove('opacity-0');
+                    confirmModal.children[0].classList.remove('scale-95');
+                }, 10);
+
+                pendingPurgeResolve = resolve;
+            });
+        }
+
+        function closeModal() {
+            confirmModal.classList.add('opacity-0');
+            confirmModal.children[0].classList.add('scale-95');
+            setTimeout(() => {
+                confirmModal.classList.add('hidden');
+            }, 300);
+            pendingPurgeResolve = null;
+        }
+
+        cancelPurgeBtn.addEventListener('click', () => {
+            if(pendingPurgeResolve) pendingPurgeResolve(false);
+            closeModal();
+        });
+
+        confirmPurgeBtn.addEventListener('click', () => {
+            if(pendingPurgeResolve) pendingPurgeResolve(true);
+            closeModal();
+        });
+
+        // Purge All feature using custom modal
+        purgeAllBtn.addEventListener('click', async () => {
+            const confirmed = await askForConfirmation();
+            if(!confirmed) return;
+            
+            logToTerminal(`[ACTION] Executing mass purge protocol...`, 'abort');
+            const files = await getAllFilesFromDB();
+            for (const f of files) {
+                await purgeFile(f.id, f.name, 'manual');
+            }
+            showToast('Holding zone completely wiped.', 'success');
+        });
+
+        // --- EVENT LISTENERS (Drag & Drop) ---
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('drag-active');
+        });
+
+        dropZone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-active');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-active');
+            if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                handleFiles(e.dataTransfer.files);
+            }
+        });
+
+        dropZone.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files && e.target.files.length > 0) {
+                handleFiles(e.target.files);
+                fileInput.value = ''; 
+            }
+        });
+
+        // --- REMOTE URL FETCHING WITH ABORT ---
+        function toggleFetchUI(isFetching) {
+            urlInput.disabled = isFetching;
+            if (isFetching) {
+                urlInput.classList.add('fetching-glow');
+                fetchUrlBtn.classList.add('hidden');
+                cancelFetchBtn.classList.remove('hidden');
+                fetchProgressBar.classList.add('w-full');
+            } else {
+                urlInput.classList.remove('fetching-glow');
+                fetchUrlBtn.classList.remove('hidden');
+                cancelFetchBtn.classList.add('hidden');
+                fetchProgressBar.classList.remove('w-full');
+                fetchProgressBar.style.width = '0';
+            }
+        }
+
+        fetchUrlBtn.addEventListener('click', async () => {
+            const url = urlInput.value.trim();
+            if (!url) {
+                showToast('Please enter a valid URL payload.', 'warning');
+                return;
+            }
+            
+            // Initialize AbortController
+            activeFetchController = new AbortController();
+            const signal = activeFetchController.signal;
+            
+            logToTerminal(`[SYSTEM] Initiating remote protocol: Fetching from ${url}`, 'info');
+            toggleFetchUI(true);
+
+            try {
+                let response;
+                try {
+                    response = await fetch(url, { signal });
+                    if (!response.ok) throw new Error('Direct fetch failed');
+                } catch(e) {
+                    if (e.name === 'AbortError') throw e; // Pass abort up immediately
+                    
+                    logToTerminal(`[WARNING] Direct fetch blocked (CORS/Network). Engaging Proxy Bypass...`, 'warning');
+                    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+                    response = await fetch(proxyUrl, { signal });
+                }
+
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                
+                logToTerminal(`[SYSTEM] Payload connection secured. Downloading stream...`, 'info');
+                
+                // Read blob (Aborts mid-download will throw AbortError here as well)
+                const blob = await response.blob();
+                
+                let filename = url.split('/').pop().split('?')[0] || `remote_payload_${generateId().substring(0,6)}.bin`;
+                const file = new File([blob], filename, { type: blob.type || 'application/octet-stream' });
+                
+                logToTerminal(`[SUCCESS] Remote interception complete.`, 'success');
+                await handleFiles([file]);
+                urlInput.value = '';
+                
+            } catch (error) {
+                if (error.name === 'AbortError') {
+                    logToTerminal(`[ABORT] User terminated network connection.`, 'abort');
+                    showToast(`Fetch aborted.`, 'warning');
+                } else {
+                    logToTerminal(`[ERROR] Remote fetch failed: ${error.message}`, 'error');
+                    showToast(`Fetch failed. Target highly secured.`, 'error');
+                }
+            } finally {
+                activeFetchController = null;
+                toggleFetchUI(false);
+            }
+        });
+
+        // Cancel Fetch event
+        cancelFetchBtn.addEventListener('click', () => {
+            if (activeFetchController) {
+                activeFetchController.abort();
+            }
+        });
+
+        urlInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !urlInput.disabled) {
+                e.preventDefault();
+                fetchUrlBtn.click();
+            }
+        });
+
+        let activePeer = null;
+        let activeConn = null;
+        
+        // Sender Elements
+        const p2pSenderModal = document.getElementById('p2p-sender-modal');
+        const p2pShareLink = document.getElementById('p2p-share-link');
+        const p2pStatusText = document.getElementById('p2p-status-text');
+        const p2pStatusIndicator = document.getElementById('p2p-status-indicator');
+        const copyP2PLinkBtn = document.getElementById('copy-p2p-link-btn');
+        
+        // Receiver Elements
+        const p2pReceiverModal = document.getElementById('p2p-receiver-modal');
+        const p2pRecvStatus = document.getElementById('p2p-recv-status');
+        const p2pRecvFilename = document.getElementById('p2p-recv-filename');
+        const p2pRecvProgressContainer = document.getElementById('p2p-recv-progress-container');
+
+        function showP2PModal(modal) {
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                if(modal.children[0]) modal.children[0].classList.remove('scale-95');
+            }, 10);
+        }
+
+        function hideP2PModal(modal) {
+            modal.classList.add('opacity-0');
+            if(modal.children[0]) modal.children[0].classList.add('scale-95');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 300);
+        }
+
+        function setP2PStatus(text, state) {
+            p2pStatusText.textContent = text;
+            p2pStatusIndicator.className = 'w-3 h-3 rounded-full ' + 
+                (state === 'waiting' ? 'bg-yellow-500 animate-pulse' : 
+                 state === 'connected' ? 'bg-green-500' : 
+                 state === 'transferring' ? 'bg-vault-glow animate-pulse' : 
+                 'bg-red-500');
+        }
+
+        // --- SENDER P2P LOGIC ---
+        function initiateP2PShare(fileId, fileName) {
+            if (activePeer) activePeer.destroy();
+            
+            showP2PModal(p2pSenderModal);
+            setP2PStatus('Initializing Peer Node...', 'waiting');
+            p2pShareLink.value = 'Generating secure link...';
+            
+            // Environment Guard Toggle
+            const warningEl = document.getElementById('p2p-file-warning');
+            if (window.location.protocol === 'file:') {
+                warningEl.classList.remove('hidden');
+            } else {
+                warningEl.classList.add('hidden');
+            }
+            
+            logToTerminal(`[SYSTEM] Spinning up P2P WebRTC node for ${fileName}...`, 'action');
+
+            activePeer = new Peer({ debug: 2 });
+
+            activePeer.on('open', (id) => {
+                const shareUrl = new URL(window.location.href);
+                shareUrl.searchParams.set('p2p', id);
+                shareUrl.searchParams.set('fid', fileId);
+                shareUrl.searchParams.set('fname', fileName);
+                
+                p2pShareLink.value = shareUrl.toString();
+                setP2PStatus('Awaiting secure connection...', 'waiting');
+                logToTerminal(`[OK] P2P Node active. ID: ${id}`, 'success');
+            });
+
+            activePeer.on('connection', (conn) => {
+                activeConn = conn;
+                setP2PStatus('Peer connected. Handshaking...', 'connected');
+                logToTerminal(`[SYSTEM] Peer connected to node.`, 'info');
+
+                conn.on('data', async (data) => {
+                    if (data.type === 'request' && data.fileId === fileId) {
+                        setP2PStatus('Transferring data payload...', 'transferring');
+                        logToTerminal(`[ACTION] Transmitting ${fileName} over secure channel...`, 'action');
+                        
+                        try {
+                            const record = await getFileFromDB(fileId);
+                            if (!record || !record.blob) throw new Error("File not found in local vault.");
+                            
+                            // Send file over WebRTC Data Channel
+                            conn.send({
+                                type: 'file',
+                                fileId: fileId,
+                                fileName: fileName,
+                                fileType: record.type,
+                                blob: record.blob
+                            });
+                            
+                            setP2PStatus('Transfer complete.', 'connected');
+                            logToTerminal(`[SUCCESS] Transmission complete.`, 'success');
+                            showToast('File sent successfully via P2P', 'success');
+                        } catch (err) {
+                            setP2PStatus('Transfer failed.', 'error');
+                            logToTerminal(`[ERROR] Transmission failed: ${err.message}`, 'error');
+                        }
+                    }
+                });
+
+                conn.on('close', () => {
+                    setP2PStatus('Peer disconnected. Awaiting new connection...', 'waiting');
+                    logToTerminal(`[SYSTEM] Peer disconnected.`, 'warning');
+                });
+            });
+
+            activePeer.on('error', (err) => {
+                setP2PStatus(`Error: ${err.type}`, 'error');
+                logToTerminal(`[ERROR] P2P Node Failure: ${err.type}`, 'error');
+            });
+        }
+
+        function cancelP2PShare() {
+            if (activePeer) {
+                activePeer.destroy();
+                activePeer = null;
+                activeConn = null;
+                logToTerminal(`[SYSTEM] P2P Node terminated by user.`, 'warning');
+            }
+            hideP2PModal(p2pSenderModal);
+        }
+
+        copyP2PLinkBtn.addEventListener('click', () => {
+            p2pShareLink.select();
+            document.execCommand('copy');
+            showToast('Secure link copied to clipboard', 'action');
+        });
+
+        // --- RECEIVER P2P LOGIC ---
+        async function checkP2PUrlParams() {
+            const params = new URLSearchParams(window.location.search);
+            const peerId = params.get('p2p');
+            const fileId = params.get('fid');
+            const fileName = params.get('fname');
+
+            if (peerId && fileId && fileName) {
+                logToTerminal(`[SYSTEM] Detected inbound P2P link. Initiating receiver...`, 'info');
+                
+                p2pRecvFilename.textContent = fileName;
+                showP2PModal(p2pReceiverModal);
+                
+                // Strip params from URL to prevent re-trigger on refresh
+                window.history.replaceState({}, document.title, window.location.pathname);
+
+                const receiverPeer = new Peer({ debug: 2 });
+
+                receiverPeer.on('open', () => {
+                    p2pRecvStatus.textContent = 'Connecting to host...';
+                    const conn = receiverPeer.connect(peerId, { reliable: true });
+                    
+                    conn.on('open', () => {
+                        p2pRecvStatus.textContent = 'Requesting file payload...';
+                        p2pRecvProgressContainer.classList.remove('hidden');
+                        conn.send({ type: 'request', fileId: fileId });
+                    });
+
+                    conn.on('data', async (data) => {
+                        if (data.type === 'file' && data.fileId === fileId) {
+                            p2pRecvStatus.textContent = 'Payload received. Decrypting...';
+                            
+                            try {
+                                // Reconstruct the file and save it to the receiver's local vault
+                                const file = new File([data.blob], data.fileName, { type: data.fileType });
+                                await handleFiles([file]);
+                                
+                                p2pRecvStatus.textContent = 'Transfer Complete!';
+                                p2pRecvProgressContainer.classList.add('hidden');
+                                showToast('P2P Transfer Complete', 'success');
+                                logToTerminal(`[SUCCESS] P2P Transfer acquired and stored locally.`, 'success');
+                                
+                                setTimeout(() => {
+                                    hideP2PModal(p2pReceiverModal);
+                                    receiverPeer.destroy();
+                                }, 2000);
+                            } catch (err) {
+                                p2pRecvStatus.textContent = 'Storage Error.';
+                                logToTerminal(`[ERROR] Failed to store received P2P payload.`, 'error');
+                            }
+                        }
+                    });
+
+                    conn.on('close', () => {
+                        if (p2pRecvStatus.textContent !== 'Transfer Complete!') {
+                            p2pRecvStatus.textContent = 'Connection lost. Host closed connection.';
+                            p2pRecvProgressContainer.classList.add('hidden');
+                        }
+                    });
+                    
+                    conn.on('error', (err) => {
+                         p2pRecvStatus.textContent = 'Connection Error.';
+                         logToTerminal(`[ERROR] P2P Connection Error: ${err.message}`, 'error');
+                    });
+                });
+
+                receiverPeer.on('error', (err) => {
+                    p2pRecvStatus.textContent = `Peer Error: ${err.type}`;
+                    logToTerminal(`[ERROR] P2P Receiver Node Failure: ${err.type}`, 'error');
+                });
+            }
+        }
+
+        // Boot Sequence
+        window.addEventListener('DOMContentLoaded', async () => {
+            logToTerminal('[SYSTEM] Boot sequence initiated...', 'info');
+            try {
+                await initDB();
+                logToTerminal('[OK] Storage array connected.', 'success');
+                await refreshUI();
+                
+                // Initialize P2P Receiver logic if URL contains share params
+                await checkP2PUrlParams();
+                
+            } catch (err) {
+                logToTerminal('[FATAL] Failed to mount storage array. Halted.', 'error');
+                showToast('Database connection failed', 'error');
+            }
+        });
+
+    </script>
+</body>
+</html>
