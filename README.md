@@ -112,20 +112,10 @@ You can use TFH directly in your web browser without installation:
 
 ### Local Development
 
-1. **Clone the repository:**
+1. **Open the Website:**
    ```bash
-   git clone https://github.com/amithrosky/TFH.git
-   cd TFH
+   (https://amithrosky.github.io/TFH/)
    ```
-
-2. **Serve locally:**
-   Because TFH runs entirely on client-side web APIs (Web Crypto, WebRTC, IndexedDB), serve the folder using any standard static file server:
-   ```bash
-   npx serve .
-   ```
-   Or open `index.html` directly in any modern browser.
-
----
 
 ## 📜 License
 
