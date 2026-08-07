@@ -113,10 +113,10 @@ You can use TFH directly in your web browser without installation:
 ### Local Development
 
 1. **Open the Website:**
-   ```bash
+   
    (https://amithrosky.github.io/TFH/)
-   ```
+   
 
 ## 📜 License
 
-Distributed under the MIT License. See `LICENSE` for more information.
+* **Vacant**
