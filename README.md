@@ -109,14 +109,3 @@ graph TD
 You can use TFH directly in your web browser without installation:
 
 👉 **[Launch TFH Web Application](https://amithrosky.github.io/TFH/)**
-
-### Local Development
-
-1. **Open the Website:**
-   
-   (https://amithrosky.github.io/TFH/)
-   
-
-## 📜 License
-
-* **Vacant**
