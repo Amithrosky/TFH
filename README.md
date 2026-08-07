@@ -1,17 +1,25 @@
 <div align="center">
 
-████████╗███████╗██╗  ██╗╚══██╔══╝██╔════╝██║  ██║██║   █████╗  ███████║██║   ██╔══╝  ██╔══██║██║   ██║     ██║  ██║╚═╝   ╚═╝     ╚═╝  ╚═╝
+```text
+█████████╗████████╗██╗   ██╗
+╚═══██╔══╝██╔═════╝██║   ██║
+    ██║   █████╗   ████████║
+    ██║   ██╔══╝   ██╔═══██║
+    ██║   ██║      ██║   ██║
+    ╚═╝   ╚═╝      ╚═╝   ╚═╝
+```
+
 ### **Temporary File Holder**
 **A secure, ephemeral, zero-knowledge utility for temporary browser-based file sharing.**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-007ACC.svg?style=for-the-badge)](#license)
+[![License: MIT](https://img.shields.io/badge/License-MIT-007ACC.svg?style=for-the-badge)](#-license)
 [![Security: E2E Encrypted](https://img.shields.io/badge/Security-Client--Side_Encryption-green?style=for-the-badge)](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API)
 [![Storage: IndexedDB](https://img.shields.io/badge/Storage-IndexedDB-orange?style=for-the-badge)](https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API)
 [![Protocol: P2P Transfer](https://img.shields.io/badge/Transfer-P2P_WebRTC-purple?style=for-the-badge)](https://webrtc.org/)
 
 *Share files securely with an automated 30-minute self-destruction protocol, P2P transfer, and local IndexedDB caching.*
 
-[Features](#-key-features) • [Architecture](#-system-architecture) • [Security Model](#-security--privacy-model) • [Quick Start](#-quick-start)
+[Live App](https://amithrosky.github.io/TFH/) • [Features](#-key-features) • [Architecture](#-system-architecture) • [Security Model](#-security--privacy-model) • [Quick Start](#-quick-start)
 
 ---
 
@@ -71,4 +79,54 @@ graph TD
 
     Timer -- "Timer Expires (30m)" --> AutoPurge["Irreversible File & Key Wipe"]
     AutoPurge --> Storage
-🔬 Technical BreakdownComponentTechnology / ProtocolPurposeCryptographyWeb Crypto API (AES-GCM / WebCrypto)End-to-end client-side encryptionStorage EngineBrowser IndexedDBHigh-capacity temporary file stagingNetwork ProtocolWebRTC DataChannelsDirect P2P peer transfersLifecycle ManagerBackground Timer AgentEnforces exact 30-minute data purgeTelemetryReal-Time Event System LogLive visibility into operations and transfers🛡️ Security & Privacy ModelIrreversible Data Purge: Files and crypto references are automatically shredded upon expiration of the 30-minute timer.Zero Plaintext Persistence: File data is encrypted on the client side before being committed to IndexedDB or streamed over P2P.Decentralized Pipeline: Direct peer-to-peer data channels keep file transfers strictly between the sender and receiver.🚀 Quick StartClone or download the repository:Bashgit clone [https://github.com/your-username/tfh.git](https://github.com/your-username/tfh.git)
+```
+
+---
+
+## 🔬 Technical Breakdown
+
+| Component | Technology / Protocol | Purpose |
+| :--- | :--- | :--- |
+| **Cryptography** | Web Crypto API (AES-GCM / WebCrypto) | End-to-end client-side encryption |
+| **Storage Engine** | Browser IndexedDB | High-capacity temporary file staging |
+| **Network Protocol** | WebRTC DataChannels | Direct P2P peer transfers |
+| **Lifecycle Manager** | Background Timer Agent | Enforces exact 30-minute data purge |
+| **Telemetry** | Real-Time Event System Log | Live visibility into operations and transfers |
+
+---
+
+## 🛡️ Security & Privacy Model
+
+* 💥 **Irreversible Data Purge**: Files and crypto references are automatically shredded upon expiration of the 30-minute timer.
+* 🔒 **Zero Plaintext Persistence**: File data is encrypted on the client side before being committed to IndexedDB or streamed over P2P.
+* 🌐 **Decentralized Pipeline**: Direct peer-to-peer data channels keep file transfers strictly between the sender and receiver.
+
+---
+
+## 🚀 Quick Start
+
+### Access Live Application
+You can use TFH directly in your web browser without installation:
+
+👉 **[Launch TFH Web Application](https://amithrosky.github.io/TFH/)**
+
+### Local Development
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/amithrosky/TFH.git
+   cd TFH
+   ```
+
+2. **Serve locally:**
+   Because TFH runs entirely on client-side web APIs (Web Crypto, WebRTC, IndexedDB), serve the folder using any standard static file server:
+   ```bash
+   npx serve .
+   ```
+   Or open `index.html` directly in any modern browser.
+
+---
+
+## 📜 License
+
+Distributed under the MIT License. See `LICENSE` for more information.
